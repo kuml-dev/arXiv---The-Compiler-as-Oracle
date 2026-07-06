@@ -1,6 +1,14 @@
 = The Compiler as Oracle — arXiv Preprint
 :description: LaTeX source for the kUML research paper "The Compiler as Oracle: Reliable LLM-Based Architecture Modeling via a Typed Internal DSL", targeting arXiv (cs.SE).
 
+image:https://zenodo.org/badge/DOI/10.5281/zenodo.21219554.svg[DOI,link=https://doi.org/10.5281/zenodo.21219554]
+
+*Citable now via Zenodo:* https://doi.org/10.5281/zenodo.21219554[10.5281/zenodo.21219554] (v1.0.0, 2026-07-06).
+The arXiv submission (cs.SE) is pending endorsement — see
+https://github.com/kuml-dev/kUML[the main kUML repository] and
+https://kuml.dev/blog/2026-07-06-gcr-benchmark-kuml-vs-plantuml-mermaid[the benchmark write-up]
+for context in the meantime.
+
 [.lead]
 *Reliable LLM-Based Architecture Modeling via a Typed Internal DSL.* +
 Argues that a statically typed internal DSL (kUML, embedded in Kotlin) turns the host
@@ -15,6 +23,7 @@ and Mermaid.
 ----
 paper.tex        # Hauptdatei (gesamtes Paper)
 references.bib   # BibTeX-Literaturverzeichnis
+CITATION.cff      # Zitier-Metadaten (GitHub "Cite this repository" + Zenodo)
 Makefile         # make pdf | make watch | make clean
 ----
 
@@ -72,4 +81,6 @@ ohne Änderungen am Fließtext.
 
 == Lizenz
 
-Apache License 2.0 — analog zum kUML-Hauptprojekt.
+Der Paper-Text ist unter https://creativecommons.org/licenses/by/4.0/[CC BY 4.0] veröffentlicht
+(siehe Zenodo-Eintrag und `CITATION.cff`) — abweichend von der Apache-2.0-Lizenz des
+kUML-Quellcodes selbst, üblich für die Trennung Text-/Code-Lizenz bei Forschungsartefakten.
