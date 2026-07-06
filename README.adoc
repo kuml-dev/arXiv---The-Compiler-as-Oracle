@@ -1,0 +1,75 @@
+= The Compiler as Oracle — arXiv Preprint
+:description: LaTeX source for the kUML research paper "The Compiler as Oracle: Reliable LLM-Based Architecture Modeling via a Typed Internal DSL", targeting arXiv (cs.SE).
+
+[.lead]
+*Reliable LLM-Based Architecture Modeling via a Typed Internal DSL.* +
+Argues that a statically typed internal DSL (kUML, embedded in Kotlin) turns the host
+compiler into a free, deterministic validation oracle for LLM-generated architecture
+models — closing a Generate-Compile-Repair (GCR) loop without a second model, grammar-
+constrained decoding, or fine-tuning. Reports a 50-task benchmark comparing kUML, PlantUML,
+and Mermaid.
+
+== Aufbau
+
+[source]
+----
+paper.tex        # Hauptdatei (gesamtes Paper)
+references.bib   # BibTeX-Literaturverzeichnis
+Makefile         # make pdf | make watch | make clean
+----
+
+== Voraussetzungen
+
+Eine TeX-Distribution (https://tug.org/texlive/[TeX Live] / https://tug.org/mactex/[MacTeX])
+mit den Paketen `acmart`, `listings`, `xcolor`, `booktabs`.
+
+.macOS (Homebrew)
+[source,bash]
+----
+brew install --cask mactex-no-gui
+----
+
+== Bauen
+
+[source,bash]
+----
+make pdf        # erzeugt build/paper.pdf
+make watch      # automatischer Rebuild bei Änderungen
+make clean      # Build-Artefakte entfernen
+----
+
+Ohne `make`:
+
+[source,bash]
+----
+latexmk -pdf paper.tex
+----
+
+== Vorlage
+
+`\documentclass[acmsmall,nonacm]{acmart}` — einspaltiges Preprint-Layout ohne
+ACM-Rechte-Block, passend für arXiv vor einer Venue-Einreichung. Alle drei
+Zielkonferenzen (ICSE, ASE, SLE) nutzen `acmart`; für eine Venue-Einreichung genügt
+ein Wechsel der Klassenoption (z. B. `sigconf` für ein zweispaltiges Konferenz-Layout)
+ohne Änderungen am Fließtext.
+
+== arXiv-Einreichung — Checkliste
+
+* `make pdf` lokal sauber durchlaufen lassen (keine Overfull-Boxen, keine fehlenden Zitate).
+* Für die arXiv-Quellen-Einreichung zusätzlich das generierte `paper.bbl` mit hochladen
+  (nicht nur `references.bib`) — vermeidet Probleme, falls arXivs TeX-Live-Snapshot
+  `ACM-Reference-Format.bst` einmal nicht mitbringt. `paper.bbl` entsteht durch einen
+  vollen `latexmk`-Lauf im `build/`-Verzeichnis.
+* Kategorie: cs.SE (Software Engineering).
+* Lizenz/Rechte-Feld auf arXiv: kein ACM-Copyright (die Vorlage ist bereits mit
+  `nonacm` und `\setcopyright{none}` konfiguriert).
+
+== Verwandte Repositories
+
+* Hauptprojekt: https://github.com/kuml-dev/kUML[kuml-dev/kUML]
+* Website: https://kuml.dev[kuml.dev]
+* Präsentation (Deutsch): https://github.com/kuml-dev/presentation-de[kuml-dev/presentation-de]
+
+== Lizenz
+
+Apache License 2.0 — analog zum kUML-Hauptprojekt.

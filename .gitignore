@@ -1,0 +1,30 @@
+# LaTeX build artifacts
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.nav
+*.out
+*.snm
+*.toc
+*.vrb
+*.synctex.gz
+*.bbl
+*.blg
+*.idx
+*.ilg
+*.ind
+*.xdv
+*.dvi
+
+# Build output directory
+build/
+
+# Root-level rendered PDF — build via `make pdf` (writes to build/) instead
+# of committing a copy here; avoids drift between .tex source and PDF.
+/paper.pdf
+
+# Editor / OS
+.DS_Store
+*.swp
+.vscode/

@@ -1,0 +1,276 @@
+\documentclass[acmsmall,nonacm]{acmart}
+\settopmatter{printacmref=false}
+\renewcommand\footnotetextcopyrightpermission[1]{}
+\setcopyright{none}
+
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+
+\definecolor{codebg}{RGB}{246,246,246}
+
+\lstdefinelanguage{kuml}{
+  morekeywords={classDiagram,sequenceDiagram,val,fun,classOf,attribute,operation,parameter,
+    association,extends,source,target,multiplicity,message,reply,loop,break_,lifeline,isActor},
+  sensitive=true,
+  morecomment=[l]{//},
+  morestring=[b]",
+}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{black!20},
+  breaklines=true,
+  columns=fullflexible,
+  keywordstyle=\bfseries,
+  showstringspaces=false,
+  language=kuml,
+}
+
+\title{The Compiler as Oracle: Reliable LLM-Based Architecture Modeling via a Typed Internal DSL}
+
+\author{Irakli Betchvaia}
+\affiliation{%
+  \institution{kUML Project}
+  \city{Braunschweig}
+  \country{Germany}
+}
+\email{irakli@betchvaia.de}
+
+\begin{abstract}
+Large language models (LLMs) are increasingly used to generate software architecture models from natural-language descriptions, typically targeting untyped external DSLs such as PlantUML or Mermaid. Because these formats defer all validation to render time, LLM outputs frequently contain hallucinated references, dangling associations, and semantically inconsistent structures that are silently rendered or fail with uninformative parse errors. We propose a Generate-Compile-Repair (GCR) framework in which the target language is a statically typed \emph{internal} DSL --- kUML, embedded in Kotlin --- and the Kotlin compiler serves as a deterministic, zero-cost validation oracle. Compile errors are fed back to the LLM as structured repair prompts, closing the loop without a second model, grammar-constrained decoding, or fine-tuning. We contribute (i) the GCR framework, (ii) a benchmark design comprising 50 natural-language architecture tasks with gold-standard models across four diagram families and three complexity tiers, and (iii) kUML as an open reference implementation. A full run over all 50 tasks with one model (Claude Sonnet 5), comparing all three target DSLs directly, shows that kUML + GCR achieves the highest semantic fidelity (SF 45.3\% vs.\ 37.9\% for PlantUML and 37.4\% for Mermaid) and the lowest hallucination rate (15.4\% vs.\ 16.5\% and 21.9\%), while the repair loop lifts kUML's initially lower first-shot compile rate (78.0\%) to 98.0\% --- close to the level of the permissive baselines. The three-model full study specified in our design remains outstanding. We release the benchmark and tooling as open source.
+\end{abstract}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+Software architecture models remain one of the primary artifacts through which engineers communicate structure, behavior, and deployment decisions. Despite decades of tooling, empirical studies consistently show that modeling is perceived as high-effort and low-reward, which limits adoption in practice \citep{whittle2013}. Large language models promise to lower this effort dramatically: an engineer describes a system in natural language, and the model emits a diagram-as-code artifact that can be versioned, reviewed, and rendered.
+
+The dominant target formats for this workflow are PlantUML and Mermaid --- \emph{untyped external DSLs} whose only correctness check is a parser invoked at render time. This creates a structural mismatch with how LLMs fail. LLM code generation errors are rarely random noise; they are plausible-looking fabrications: an association pointing to a class that was never declared, a message in a sequence diagram sent by a participant with a subtly different name, a C4 relationship crossing an undeclared boundary. In an untyped format, such defects are either rendered silently (the renderer helpfully auto-creates the missing node, masking the hallucination) or rejected with a line-level parse error that carries no semantic information. Neither outcome gives the user --- or an automated pipeline --- a reliable signal about model validity.
+
+Our core observation is that this validation gap is an artifact of the target language choice, not of LLMs per se. If the model generates code in a \emph{statically typed internal DSL} --- a DSL embedded in a general-purpose host language --- then the host compiler performs name resolution, type checking, and scope analysis on every generated artifact, for free and deterministically. An unresolved reference is no longer a rendering curiosity; it is a compile error with a precise location, an identifier, and often a ``did you mean'' suggestion. This turns the compiler into exactly the kind of oracle that LLM self-repair techniques need: cheap, deterministic, and complete with respect to a well-defined class of errors.
+
+We instantiate this idea with kUML, a type-safe internal DSL in Kotlin for UML, SysML 2.0, and C4 modeling, and wrap it in a Generate-Compile-Repair (GCR) loop: the LLM generates kUML code, \texttt{kotlinc} compiles it, and on failure the diagnostics are parsed into a structured repair prompt for the next iteration. Unlike self-consistency sampling, LLM-as-judge validation, or grammar-constrained decoding, the validator here is not another stochastic component but a compiler with full type-system semantics.
+
+This paper makes the following contributions:
+
+\begin{itemize}
+  \item \textbf{A framework.} We define the Generate-Compile-Repair loop for architecture model generation, including prompt design, error-class taxonomy, repair-prompt construction, and termination conditions (Section~\ref{sec:gcr}).
+  \item \textbf{A benchmark design.} We specify a 50-task corpus of natural-language architecture descriptions with gold-standard kUML models, stratified by complexity and diagram type, together with five metrics that separate syntactic validity from semantic fidelity (Section~\ref{sec:benchmark}).
+  \item \textbf{A reference implementation.} kUML --- with SVG renderer, layout engine, CLI, and Maven Central artifacts --- serves as the open, reproducible substrate for the study (Section~\ref{sec:kuml}).
+  \item \textbf{Empirical evidence.} A full run over the 50-task corpus with one model, comparing all three target DSLs directly, quantifies semantic fidelity, hallucination rate, and the compensating effect of the repair loop, and provides a first, cautious assessment of the study hypotheses (Section~\ref{sec:results}).
+\end{itemize}
+
+The remainder of the paper is organized as follows. Section~\ref{sec:related} surveys related work on DSL engineering, textual modeling, LLM code generation, and self-repair. Section~\ref{sec:gcr} presents the GCR framework. Section~\ref{sec:benchmark} details the benchmark design. Section~\ref{sec:results} reports the results of a full run over the 50-task corpus with a single model and provides a first assessment of the study hypotheses. Sections~\ref{sec:discussion} and~\ref{sec:conclusion} discuss limitations, generalization, and future work.
+
+\section{Background and Related Work}
+\label{sec:related}
+
+\subsection{Internal versus External DSLs}
+
+Fowler distinguishes \emph{external} DSLs --- languages with their own syntax and parser --- from \emph{internal} DSLs, which are idiomatic APIs embedded in a host language \citep{fowler2010}. External DSLs offer notational freedom but require dedicated language infrastructure: parsers, editors, validators. Language workbenches such as MontiCore reduce this cost through grammar-driven generation of tooling \citep{krahn2010}, but the resulting validators remain bespoke and typically shallower than a mature compiler's type system.
+
+Internal DSLs inherit the host language's entire front end. Kotlin is particularly well suited as a host: \emph{lambdas with receiver} allow nested block syntax (\texttt{class\_("Account") \{ attribute(...) \}}) in which the receiver type scopes which constructs are legal at each nesting level, and the \texttt{@DslMarker} annotation prevents accidental cross-scope calls --- a form of statically enforced structural well-formedness \citep{ghosh2010,fowler2010}. Crucially for our purposes, every reference in an internal DSL program is an ordinary identifier or a checked value, so the compiler's name resolution and type checking apply to the \emph{model}, not merely to the code around it.
+
+\subsection{Textual Architecture Modeling}
+
+PlantUML and Mermaid have made diagrams-as-code mainstream: plain-text sources diff cleanly, live in version control, and render in documentation pipelines. Both, however, are untyped external DSLs with permissive parsers. PlantUML auto-declares participants and classes on first mention, so a misspelled reference silently creates a phantom node rather than raising an error. Mermaid's parser rejects malformed input, but its diagnostics are line-oriented and lexical (``Parse error on line 7: expecting `SPACE'\ldots''), carrying no information about \emph{which model element} is inconsistent. Empirical MDE research has long noted that weak tool feedback is a primary adoption barrier \citep{whittle2013}; the same weakness now resurfaces as a missing training signal for automated repair.
+
+\subsection{LLM Code Generation}
+
+Neural code generation predates LLMs; syntax-aware decoders that generate ASTs rather than tokens guaranteed well-formed output by construction \citep{yinneubig2017}. Modern LLMs \citep{brown2020,openai2023} achieve strong functional accuracy on mainstream languages, as established by Codex and its HumanEval benchmark \citep{chen2021} and confirmed across models and task types in subsequent evaluations \citep{peng2023,leinonen2023}. Two findings from this literature motivate our design. First, correctness drops sharply for low-resource languages and idiosyncratic APIs --- a direct concern for kUML, whose surface syntax is far rarer in training corpora than PlantUML's. Second, prompting techniques such as chain-of-thought \citep{wei2022} and few-shot exemplars substantially close this gap, suggesting that syntax unfamiliarity is a mitigable, not fundamental, obstacle. Constrained decoding and structured-output modes enforce grammatical validity at the token level but cannot enforce \emph{referential} validity --- a grammar cannot know that \texttt{SavingsAccount} extends a class that was never declared.
+
+\subsection{LLM Self-Repair}
+
+A growing body of work closes the loop between generation and execution feedback. Self-Debugging prompts a model to explain and fix its own code given interpreter output \citep{chen2023}; Reflexion generalizes this to verbal reinforcement from environment feedback across episodes \citep{shinn2023}. These methods consistently show that the \emph{quality} of the feedback signal is the dominant factor: unit-test failures with concrete expected/actual values outperform generic ``there is a bug'' signals. Our framework can be read as a corollary: for modeling languages, a type-checking compiler is the richest deterministic feedback source available, strictly more informative than an untyped parser and --- unlike LLM-as-judge validation --- free of its own hallucination risk.
+
+\textbf{Positioning.} To our knowledge, no prior work has used host-compiler feedback on a \emph{typed internal DSL} as the repair oracle for LLM-based \emph{architecture model} generation. Existing self-repair work targets general-purpose code with test oracles; existing modeling work targets untyped external DSLs without any oracle. We occupy the intersection.
+
+\section{The Generate-Compile-Repair Framework}
+\label{sec:gcr}
+
+\subsection{Overview}
+
+The GCR loop is deliberately minimal:
+
+\begin{lstlisting}
+sequenceDiagram(name = "GCR -- Generate-Compile-Repair") {
+    val engineer = lifeline(name = "Engineer") { isActor = true }
+    val llm      = lifeline(name = "LLM")
+    val kotlinc  = lifeline(name = "kotlinc")
+    val renderer = lifeline(name = "SVG Renderer")
+
+    message(from = engineer, to = llm, label = "NL task")
+
+    loop(guard = "k <= 3") {
+        message(from = llm, to = kotlinc, label = "kUML code")
+
+        break_(guard = "[success]") {
+            message(from = kotlinc, to = renderer, label = "render")
+            reply(from = renderer, to = engineer, label = "SVG")
+        }
+
+        reply(from = kotlinc, to = llm, label = "repair prompt: code + parsed errors")
+    }
+}
+\end{lstlisting}
+
+The pipeline has no learned components other than the generator itself. The compile phase is deterministic and side-effect-free; identical inputs yield identical diagnostics, which makes the loop reproducible and cheap to benchmark.
+
+\subsection{The Target DSL: kUML}
+\label{sec:kuml}
+
+kUML is an internal DSL in Kotlin covering UML class, sequence, and state-machine diagrams, SysML 2.0, and the C4 model. Models are ordinary Kotlin scripts (\texttt{.kuml.kts}):
+
+\begin{lstlisting}
+classDiagram(name = "Banking") {
+    val account = classOf(name = "Account") {
+        attribute(name = "id", type = "Long")
+        attribute(name = "balance", type = "Double")
+        operation(name = "deposit") {
+            parameter(name = "amount", type = "Double")
+        }
+    }
+    val savingsAccount = classOf(name = "SavingsAccount") {
+        attribute(name = "interestRate", type = "Double")
+        extends(general = account)
+    }
+    val transaction = classOf(name = "Transaction") {
+        attribute(name = "amount", type = "Double")
+        attribute(name = "date", type = "String")
+    }
+    association(source = account, target = transaction) {
+        source { multiplicity(spec = "1") }
+        target { multiplicity(spec = "0..*") }
+    }
+}
+\end{lstlisting}
+
+Three properties make kUML a suitable GCR target. First, \emph{scoping is typed}: each block's receiver type exposes only the constructs valid at that nesting level, and \texttt{@DslMarker} prevents calls from leaking into enclosing scopes --- an \texttt{attribute(...)} call outside a classifier body is a compile error, not a rendering surprise. Second, \emph{structural constraints are host-checked}: malformed constructs (wrong arity, wrong argument types, illegal nesting) are rejected by \texttt{kotlinc} with precise locations. Third, the toolchain is complete and reproducible: a deterministic layout engine, an SVG renderer, a CLI (\texttt{kuml render}), an Obsidian plugin, and an Asciidoctor extension, with artifacts published on Maven Central. Kotlin was chosen over alternative hosts primarily for its receiver-scoped lambdas, which give external-DSL-like surface syntax while retaining full static checking.
+
+A design note on referential checking: element cross-references in the current surface syntax (e.g., \texttt{extends "Account"}) are string-based for readability; referential integrity for these is enforced by the kUML script-compilation stage, which resolves names against the model under construction and reports unresolved references \emph{through the same compiler diagnostics channel}. From the loop's perspective, both host-type errors and DSL-resolution errors arrive as compile-time diagnostics with source locations, and we treat them uniformly.
+
+\subsection{Generate Phase}
+
+The generator receives a system prompt containing (i) a compact kUML syntax reference (\textasciitilde 600 tokens) enumerating the constructs per diagram type, (ii) two few-shot exemplars per diagram family, chosen to demonstrate exactly the constructs the corpus exercises, and (iii) explicit negative guidance (``do not invent constructs; every referenced element must be declared''). The user prompt is the natural-language task verbatim. We deliberately avoid chain-of-thought scaffolding in the generate phase to keep the baseline comparable across target languages; the same NL task, temperature, and exemplar count are used for the PlantUML and Mermaid baselines.
+
+\subsection{Compile Phase}
+
+Generated code is compiled with \texttt{kotlinc} against the kUML DSL artifacts. We classify diagnostics into three model-relevant error classes:
+
+\begin{itemize}
+  \item \textbf{UnresolvedReference} --- an identifier or element name that does not resolve: hallucinated classes, misspelled participants, references to elements the model ``intended'' but never declared. This is the direct compile-time signature of a reference hallucination.
+  \item \textbf{TypeMismatch} --- a construct applied to the wrong kind of element or with wrong argument types, e.g., a multiplicity attached to a generalization, or a lifeline operation used where a classifier operation is required.
+  \item \textbf{ScopeViolation} --- a construct invoked outside its legal receiver scope, caught by receiver typing and \texttt{@DslMarker}, e.g., \texttt{attribute(...)} at diagram level.
+\end{itemize}
+
+Diagnostics outside these classes (imports, script boilerplate) are grouped as \textbf{Other} and handled by the same repair mechanism. A successful compile proceeds to \texttt{kuml render}, which by construction cannot fail on references --- the model is already resolved.
+
+\subsection{Repair Phase}
+
+On compile failure, a repair prompt is constructed from three parts: the complete previous code (not a diff --- pilot experience showed models mis-anchor diffs), the parsed diagnostics as a numbered list of \texttt{(line, error class, message)} triples, and a fixed instruction: ``Fix all listed errors. Do not change model content that is not implicated by an error. Return the complete corrected script.'' Compiler messages are passed nearly verbatim; Kotlin's diagnostics already name the offending identifier and frequently suggest candidates (``unresolved reference: \texttt{Transacton} --- did you mean \texttt{Transaction}?''), which is precisely the expected/actual structure the self-repair literature identifies as most effective \citep{chen2023}. A max-iterations guard ($k = 3$) bounds cost; we also terminate early if two consecutive iterations produce byte-identical code, indicating a repair fixpoint the model cannot escape.
+
+\subsection{Termination Conditions}
+
+The loop terminates in exactly one of three states: \textbf{Success} (compilation and rendering succeed within $k$ iterations), \textbf{Exhausted} ($k$ iterations without a clean compile), or \textbf{Stuck} (fixpoint detection). All three states, together with per-iteration diagnostics, are logged for the metric computation in Section~\ref{sec:metrics}. Note that Success is a \emph{syntactic} verdict; semantic fidelity is measured separately against the gold standard.
+
+\section{Benchmark Design}
+\label{sec:benchmark}
+
+\subsection{Task Corpus}
+
+The corpus comprises 50 natural-language architecture descriptions, each paired with a gold-standard kUML model authored and cross-reviewed by two experienced architects. Tasks are stratified along two axes:
+
+\textbf{Complexity.} \emph{Simple} (15 tasks): $\leq 6$ elements, $\leq 6$ relationships, single diagram concern --- e.g., ``a library system with books, members, and loans.'' \emph{Medium} (20 tasks): 7--15 elements, mixed relationship kinds, at least one inheritance hierarchy or boundary --- e.g., a payment service with gateway abstraction and two provider implementations. \emph{Complex} (15 tasks): 16--30 elements, cross-cutting constraints, deliberately entity-dense descriptions in which several entities are mentioned only once and are easy to drop or duplicate --- e.g., a Car2X test-automation platform with layered components and external systems.
+
+\textbf{Diagram type.} Class diagrams (20), sequence diagrams (10), C4 container/component diagrams (12), SysML 2.0 diagrams (8). The skew toward class diagrams reflects their dominance in practice; the SysML slice probes generalization to a family with sparser training-data presence for \emph{all} target languages, partially controlling for the familiarity confound discussed in Section~\ref{sec:results}.
+
+Descriptions are written to be target-language-neutral: they name entities, relationships, multiplicities, and interactions in prose, never using PlantUML/Mermaid/kUML keywords. Gold standards additionally exist as normalized node/edge sets (see SF below), so no metric requires string-level comparison of source code.
+
+\subsection{Baselines}
+
+Four conditions are evaluated per task and model: (B1) \textbf{kUML + GCR} --- the full loop, $k = 3$; (B2) \textbf{kUML direct} --- single-shot kUML generation, isolating the contribution of repair from that of the DSL itself; (B3) \textbf{PlantUML direct} --- single-shot, validated by the PlantUML renderer in strict mode; (B4) \textbf{Mermaid direct} --- single-shot, validated by \texttt{mermaid-cli}. For fairness, B3 and B4 additionally receive an analogous repair loop using their parsers' error output (B3+R, B4+R), so the comparison separates \emph{having a loop} from \emph{having a typed oracle inside the loop}.
+
+\subsection{Models}
+
+We evaluate GPT-4o, Claude Sonnet, and Gemini Pro at temperature 0.2, three samples per task-condition cell. Using three frontier models from different providers guards against conclusions that are artifacts of one model's training distribution --- a real risk given that PlantUML familiarity differs sharply across models.
+
+\subsection{Metrics}
+\label{sec:metrics}
+
+\begin{itemize}
+  \item \textbf{Compile Rate (CR).} Fraction of first-shot outputs that pass validation (compilation for kUML; strict parsing for PlantUML/Mermaid). Measures raw syntax familiarity.
+  \item \textbf{Final Compile Rate (FCR).} Fraction of outputs passing validation within $k = 3$ repair iterations. The primary syntactic outcome.
+  \item \textbf{Semantic Fidelity (SF).} Both the generated and gold model are normalized to labeled node and edge sets (element name + kind; edge endpoints + relationship kind + multiplicity). SF is the mean of node-set and edge-set Jaccard similarity, computed after case- and whitespace-normalization with a conservative synonym map (e.g., \texttt{Client}/\texttt{Customer} only when the task text licenses it). SF is computed for \emph{all} final outputs; non-compiling outputs are parsed best-effort so that syntactic failure is not automatically scored as SF~=~0, avoiding metric leakage between FCR and SF.
+  \item \textbf{Hallucination Rate (HR).} Fraction of references in the final model whose target does not exist in the model \emph{or} does not correspond to any entity in the task description. The first clause is mechanically checkable; the second requires the gold alignment. For kUML post-GCR, the first clause is zero by construction --- the interesting quantity is whether the loop merely \emph{deletes} hallucinations or resolves them to intended entities, which HR's second clause captures.
+  \item \textbf{Repair Iterations (RI).} Mean iterations to success among eventually-successful runs, measuring oracle actionability: a more informative error signal should yield lower RI at equal FCR.
+\end{itemize}
+
+Cost (tokens per successful model) is reported as a secondary observation for the practicality discussion.
+
+\section{Empirical Results: Full Corpus, Single Model}
+\label{sec:results}
+
+We report the results of a full run over all 50 tasks in the corpus, comparing all three target DSLs directly. This run supersedes the earlier pilot ($n = 10$, kUML only) but is explicitly not yet the full study specified in Section~\ref{sec:benchmark} (Models): it evaluates one model (Claude Sonnet 5) with one sample per task-DSL cell, not three models with three samples. Variance and significance claims are not possible on this basis; all numbers should be read as point estimates for a single model.
+
+\textbf{Methodology.} For each task and target DSL, a freshly instantiated agent --- with no access to the gold standard --- generates diagram code from the natural-language task description and validates it with the real toolchain: \texttt{kuml render} for kUML, \texttt{plantuml -tsvg} for PlantUML, \texttt{mermaid-cli} for Mermaid. On validation failure, the agent reads the diagnostics and repairs --- up to $k = 3$ attempts with fixpoint detection on byte-identical retries, exactly the GCR loop described in Section~\ref{sec:gcr}. PlantUML and Mermaid receive the equivalent repair loop foreseen in Section~\ref{sec:benchmark} (Baselines), driven by their respective parsers' error output (B3+R, B4+R), so the comparison separates \emph{having a loop} from \emph{the quality of the oracle inside the loop}.
+
+\textbf{Smoke test: the invisible errors, observed directly.} A smoke test conducted beforehand confirms the phenomenon described in Section~\ref{sec:related} head-on. A single typo in an association reference (\texttt{Boook} instead of \texttt{Book}) is accepted without complaint by both PlantUML and Mermaid: each auto-creates a phantom class and renders successfully (exit code 0). kUML rejects the same defect --- exit code 3, diagnostic \texttt{Unresolved reference 'boook'.} The errors do not disappear; they become invisible.
+
+\textbf{Overall results.} Across all 50 tasks (one sample per cell, Claude Sonnet 5):
+
+\begin{table}[h]
+\caption{Overall benchmark results across all 50 tasks, one sample per cell.}
+\label{tab:overall}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+DSL & CR & FCR & SF & HR & RI \\
+\midrule
+kUML + GCR     & 78.0\% & 98.0\%  & \textbf{45.3\%} & \textbf{15.4\%} & 1.27 \\
+PlantUML (+R)  & 98.0\% & 100.0\% & 37.9\% & 16.5\% & 1.02 \\
+Mermaid (+R)   & 98.0\% & 100.0\% & 37.4\% & 21.9\% & 1.02 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+CR = first-shot compile rate; FCR = final compile rate within $\leq 3$ repair iterations; SF = semantic fidelity (Jaccard over normalized node/edge sets, Section~\ref{sec:metrics}); HR = hallucination rate; RI = mean repair iterations among eventual successes. Node- and edge-set Jaccard breakdowns: kUML 60.6\%/29.9\%, PlantUML 53.2\%/22.5\%, Mermaid 51.7\%/23.1\%.
+
+The pattern splits cleanly in two. On the syntactic metrics, the permissive parsers accept nearly everything on the first shot (CR = 98.0\%); kUML starts lower, as expected (78.0\%), and is lifted by the repair loop to near-baseline level (FCR = 98.0\%). On the quality-oriented metrics the picture inverts: kUML delivers the highest semantic fidelity (45.3\% vs.\ 37.9\% and 37.4\%) and the lowest hallucination rate (15.4\% vs.\ 16.5\% and 21.9\%).
+
+\textbf{Findings by diagram type.} Class diagrams ($n = 20$), the largest and least noisy stratum, show the clearest lead: kUML reaches SF = 62.1\% and HR = 3.6\%, ahead of PlantUML (SF = 59.2\%, HR = 5.8\%) and Mermaid (SF = 53.5\%, HR = 5.4\%). On C4 diagrams ($n = 12$), kUML's first-shot rate collapses to 16.7\% --- the hardest target syntax in the entire corpus; the suspected cause is \texttt{relationship(...)} calls at container level requiring an explicit \texttt{val} binding, which the compact prompt did not emphasize sufficiently. The repair loop recovers this family to 91.7\% FCR, at RI = 2.09 --- by far the most repair iterations in the run. Exactly one cell in the entire run terminated Exhausted (C4-S-01, kUML) --- one out of 150 (50 tasks $\times$ 3 DSLs). For SysML 2 ($n = 8$), neither PlantUML nor Mermaid has native support; both were instructed to transliterate blocks (\texttt{partDef}) into plain class notation with composition and generalization arrows --- the obvious workaround. Mermaid loses the most structure in this translation (SF = 17.3\%, HR = 50.0\% --- the weakest single cell of the entire run), PlantUML somewhat less (SF = 27.8\%, HR = 30.8\%); kUML reaches SF = 35.0\% at HR = 17.4\%. Sequence diagrams ($n = 10$) provide the sole counter-finding: here Mermaid slightly overtakes kUML on SF (36.2\% vs.\ 31.0\%) --- kUML's advantages are not uniform across all diagram families.
+
+\textbf{Assessment of the hypotheses.} The hypotheses formulated during the pilot phase for the full study can now be held against data for the first time, cautiously --- with mixed results:
+
+\begin{itemize}
+  \item \textbf{H1} --- FCR(kUML + GCR) $>$ FCR(PlantUML + R) --- is \textbf{not confirmed} at the aggregate level; in its literal formulation it is refuted: kUML reaches FCR = 98.0\%, slightly \emph{below} the 100.0\% of PlantUML and Mermaid. The reason is instructive: the permissiveness of the untyped parsers drives FCR toward a trivial upper bound --- almost nothing ever fails ``finally'' there, because almost nothing is ever rejected. A pure FCR comparison thus masks the actual signal (a ceiling effect induced by permissiveness). That signal lives in CR: kUML starts at 78.0\% (C4: as low as 16.7\%) and is lifted by the repair loop to 98.0\% --- the compensating effect promised by the framework is clearly visible. We read this finding not as an embarrassment but as a refinement of metric choice for future studies: against permissive validators, FCR alone is uninformative and must always be read jointly with SF and HR, because a permissive validator buys high FCR precisely by rendering errors invisible.
+  \item \textbf{H2} --- HR(kUML + GCR) $<$ HR(PlantUML direct) --- is \textbf{tentatively confirmed}, though with a modest margin at the aggregate level (15.4\% vs.\ 16.5\%); on class diagrams the margin is clearer (3.6\% vs.\ 5.8\%).
+  \item \textbf{H3} --- SF(kUML + GCR) $>$ SF(Mermaid direct) --- is \textbf{confirmed} at the aggregate level (45.3\% vs.\ 37.4\%), with the exception of the sequence-diagram family, where kUML narrowly loses.
+\end{itemize}
+
+\textbf{Limitations of this run.} The strength of these results is bounded by the run's design. One model instead of three and one sample per cell instead of three mean no variance estimation, no significance claims, and single-cell findings (such as the one Exhausted cell) may be chance products. The hallucination rate is an algorithmic approximation via fuzzy name matching against the model and the task text, not a semantic judgment by a human rater or an LLM judge. And the rendered SVGs were not visually inspected; the evaluation stops at the normalized node/edge sets. The three-model full study with three samples per cell specified in Section~\ref{sec:benchmark} (Models) remains the next step.
+
+\section{Discussion}
+\label{sec:discussion}
+
+\textbf{Generalizability.} Nothing in the GCR loop is specific to kUML or to modeling. The framework applies to any statically typed internal DSL with a batch-invocable compiler: Gradle Kotlin DSL, Kotlin-based infrastructure definitions, Compose UI trees, or typed configuration DSLs generally. The transferable insight is a language-design guideline for the LLM era: \emph{when choosing or designing a DSL that machines will write, the strength of the free validation oracle is a first-class design criterion.} Untyped external DSLs optimize for human writability at the cost of machine checkability --- a trade-off whose terms have shifted now that the marginal writer is a language model.
+
+\textbf{Limitations.} First, compile success is not semantic correctness: a model can be perfectly typed and entirely wrong about the described system. The SF metric exists precisely to keep this gap measurable, and our results should be read as pairs (FCR, SF), never FCR alone. Second, the current string-based cross-reference surface means some referential guarantees live in the kUML resolution stage rather than the host type system proper; a fully reference-typed surface would move them into \texttt{kotlinc} itself (see below). Third, compile latency (seconds per iteration with a warm daemon) exceeds parse latency (milliseconds); for interactive use this is noticeable, though amortized cost per \emph{valid} model favors GCR in the pilot. Fourth, benchmark gold standards embed authorial modeling judgment; two-architect cross-review mitigates but does not eliminate this. Fifth, the empirical evidence in Section~\ref{sec:results} carries the additional constraints stated there --- one model instead of three, one sample per cell, an algorithmically approximated hallucination rate, no visual inspection of rendered output --- which only the three-model full study (Section~\ref{sec:benchmark}, Models) can remove; we do not repeat them here.
+
+\textbf{Future work.} Two threads follow directly. A formal treatment of kUML's type system --- characterizing exactly which model well-formedness constraints are host-checkable and which require the resolution stage --- would replace our empirical error taxonomy with a proven one. And a user study on how engineers experience GCR-assisted modeling (trust, review effort, over-reliance) would test whether oracle-backed generation changes practitioner behavior, not just artifact quality.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+We presented Generate-Compile-Repair, a framework that replaces the missing validation oracle in LLM-based architecture modeling with an existing, deterministic, and free one: the host compiler of a statically typed internal DSL. Using kUML as the reference target, compile errors --- unresolved references, type mismatches, scope violations --- become structured repair signals that close the generation loop without additional learned components. We contributed the framework, a stratified 50-task benchmark design with metrics separating syntactic validity from semantic fidelity, and empirical evidence from a full run over the entire corpus with one model, comparing all three target DSLs directly: kUML + GCR achieves the highest semantic fidelity (45.3\% vs.\ 37.9\% for PlantUML and 37.4\% for Mermaid) and the lowest hallucination rate (15.4\%), and the repair loop lifts kUML's initial compile rate from 78.0\% to 98.0\% --- the promised compensating effect. At the same time, H1 was not confirmed in its literal formulation: the permissive baselines reach 100\% FCR precisely because their parsers do not reject errors but render them invisible --- an instructive finding that devalues FCR as a standalone comparison metric and vindicates the paired reading (FCR, SF, HR).
+
+The benchmark corpus, gold-standard models, harness, and kUML itself are released as open source, and we invite the community to extend the corpus with additional diagram families, target DSLs, and models. The three-model full study remains outstanding; the evidence so far, however, already supports a simple practical recommendation: when LLMs write your models, let a compiler read them first.
+
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{references}
+
+\end{document}
