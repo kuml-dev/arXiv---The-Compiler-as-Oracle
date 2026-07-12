@@ -6,6 +6,9 @@
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
 
 \definecolor{codebg}{RGB}{246,246,246}
 
@@ -120,6 +123,15 @@ sequenceDiagram(name = "GCR -- Generate-Compile-Repair") {
 }
 \end{lstlisting}
 
+Rendered with \texttt{kuml render}, the listing above produces Figure~\ref{fig:gcr-loop} --- the same source that describes the loop in prose also draws it, a small illustration of the paper's own thesis: a typed model is not just checkable, it is directly renderable.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.85\linewidth]{figures/gcr-loop.pdf}
+\caption{The Generate-Compile-Repair loop, rendered by kUML from the kUML source listing above.}
+\label{fig:gcr-loop}
+\end{figure}
+
 The pipeline has no learned components other than the generator itself. The compile phase is deterministic and side-effect-free; identical inputs yield identical diagnostics, which makes the loop reproducible and cheap to benchmark.
 
 \subsection{The Target DSL: kUML}
@@ -150,6 +162,15 @@ classDiagram(name = "Banking") {
     }
 }
 \end{lstlisting}
+
+\texttt{kuml render} turns the listing above directly into Figure~\ref{fig:banking} --- no manual layout step, no separate diagramming tool. This is the deliverable the compiler oracle protects: a checked model that is also a picture.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.7\linewidth]{figures/banking.pdf}
+\caption{The \texttt{Banking} class diagram, rendered by kUML from the kUML source listing above.}
+\label{fig:banking}
+\end{figure}
 
 Three properties make kUML a suitable GCR target. First, \emph{scoping is typed}: each block's receiver type exposes only the constructs valid at that nesting level, and \texttt{@DslMarker} prevents calls from leaking into enclosing scopes --- an \texttt{attribute(...)} call outside a classifier body is a compile error, not a rendering surprise. Second, \emph{structural constraints are host-checked}: malformed constructs (wrong arity, wrong argument types, illegal nesting) are rejected by \texttt{kotlinc} with precise locations. Third, the toolchain is complete and reproducible: a deterministic layout engine, an SVG renderer, a CLI (\texttt{kuml render}), an Obsidian plugin, and an Asciidoctor extension, with artifacts published on Maven Central. Kotlin was chosen over alternative hosts primarily for its receiver-scoped lambdas, which give external-DSL-like surface syntax while retaining full static checking.
 
@@ -240,7 +261,34 @@ Mermaid (+R)   & 98.0\% & 100.0\% & 37.4\% & 21.9\% & 1.02 \\
 
 CR = first-shot compile rate; FCR = final compile rate within $\leq 3$ repair iterations; SF = semantic fidelity (Jaccard over normalized node/edge sets, Section~\ref{sec:metrics}); HR = hallucination rate; RI = mean repair iterations among eventual successes. Node- and edge-set Jaccard breakdowns: kUML 60.6\%/29.9\%, PlantUML 53.2\%/22.5\%, Mermaid 51.7\%/23.1\%.
 
-The pattern splits cleanly in two. On the syntactic metrics, the permissive parsers accept nearly everything on the first shot (CR = 98.0\%); kUML starts lower, as expected (78.0\%), and is lifted by the repair loop to near-baseline level (FCR = 98.0\%). On the quality-oriented metrics the picture inverts: kUML delivers the highest semantic fidelity (45.3\% vs.\ 37.9\% and 37.4\%) and the lowest hallucination rate (15.4\% vs.\ 16.5\% and 21.9\%).
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  ybar,
+  bar width=14pt,
+  width=0.95\linewidth,
+  height=5.2cm,
+  ymin=0, ymax=50,
+  ylabel={Percent},
+  symbolic x coords={SF, HR},
+  xtick=data,
+  enlarge x limits=0.35,
+  legend style={at={(0.5,-0.18)}, anchor=north, legend columns=-1, draw=none, font=\small},
+  nodes near coords,
+  every node near coord/.append style={font=\scriptsize},
+  ]
+\addplot[fill=black!75] coordinates {(SF,45.3) (HR,15.4)};
+\addplot[fill=black!40] coordinates {(SF,37.9) (HR,16.5)};
+\addplot[fill=black!15] coordinates {(SF,37.4) (HR,21.9)};
+\legend{kUML + GCR, PlantUML (+R), Mermaid (+R)}
+\end{axis}
+\end{tikzpicture}
+\caption{Semantic fidelity (higher is better) and hallucination rate (lower is better), aggregated across all 50 tasks, single-model run (Claude Sonnet 5). kUML leads on both quality metrics despite the permissive baselines' higher compile rates (Table~\ref{tab:overall}).}
+\label{fig:sf-hr-bars}
+\end{figure}
+
+The pattern splits cleanly in two. On the syntactic metrics, the permissive parsers accept nearly everything on the first shot (CR = 98.0\%); kUML starts lower, as expected (78.0\%), and is lifted by the repair loop to near-baseline level (FCR = 98.0\%). On the quality-oriented metrics the picture inverts: kUML delivers the highest semantic fidelity (45.3\% vs.\ 37.9\% and 37.4\%) and the lowest hallucination rate (15.4\% vs.\ 16.5\% and 21.9\%), visualized in Figure~\ref{fig:sf-hr-bars}.
 
 \textbf{Findings by diagram type.} Class diagrams ($n = 20$), the largest and least noisy stratum, show the clearest lead: kUML reaches SF = 62.1\% and HR = 3.6\%, ahead of PlantUML (SF = 59.2\%, HR = 5.8\%) and Mermaid (SF = 53.5\%, HR = 5.4\%). On C4 diagrams ($n = 12$), kUML's first-shot rate collapses to 16.7\% --- the hardest target syntax in the entire corpus; the suspected cause is \texttt{relationship(...)} calls at container level requiring an explicit \texttt{val} binding, which the compact prompt did not emphasize sufficiently. The repair loop recovers this family to 91.7\% FCR, at RI = 2.09 --- by far the most repair iterations in the run. Exactly one cell in the entire run terminated Exhausted (C4-S-01, kUML) --- one out of 150 (50 tasks $\times$ 3 DSLs). For SysML 2 ($n = 8$), neither PlantUML nor Mermaid has native support; both were instructed to transliterate blocks (\texttt{partDef}) into plain class notation with composition and generalization arrows --- the obvious workaround. Mermaid loses the most structure in this translation (SF = 17.3\%, HR = 50.0\% --- the weakest single cell of the entire run), PlantUML somewhat less (SF = 27.8\%, HR = 30.8\%); kUML reaches SF = 35.0\% at HR = 17.4\%. Sequence diagrams ($n = 10$) provide the sole counter-finding: here Mermaid slightly overtakes kUML on SF (36.2\% vs.\ 31.0\%) --- kUML's advantages are not uniform across all diagram families.
 
