@@ -23,7 +23,9 @@ and Mermaid.
 ----
 paper.tex        # Hauptdatei (gesamtes Paper)
 references.bib   # BibTeX-Literaturverzeichnis
-CITATION.cff      # Zitier-Metadaten (GitHub "Cite this repository" + Zenodo)
+figures/         # Gerenderte Abbildungen (SVG-Quelle + PDF fürs Einbinden)
+CITATION.cff     # Zitier-Metadaten (GitHub "Cite this repository" + Zenodo)
+.zenodo.json     # Zenodo-Metadaten für die GitHub-Zenodo-Integration (siehe unten)
 Makefile         # make pdf | make watch | make clean
 ----
 
@@ -72,6 +74,38 @@ ohne Änderungen am Fließtext.
 * Kategorie: cs.SE (Software Engineering).
 * Lizenz/Rechte-Feld auf arXiv: kein ACM-Copyright (die Vorlage ist bereits mit
   `nonacm` und `\setcopyright{none}` konfiguriert).
+
+== Neue Zenodo-Version veröffentlichen
+
+Das Paper hat sich seit dem manuell hochgeladenen v1.0.0-Zenodo-Eintrag (2026-07-06,
+Einzelmodell-Stand, keine Abbildungen) weiterentwickelt: drei Abbildungen und die
+Typed-Domain-Grounding-Terminologie sind seither dazugekommen (2026-07-12). v1.0.0
+wurde ohne GitHub-Zenodo-Integration hochgeladen, daher lässt sich keine automatische
+"neue Version desselben Datensatzes" erzeugen — ein neuer Release über die
+GitHub-Integration legt einen **eigenständigen, neuen Zenodo-Eintrag** (eigene
+Concept-DOI) an. `.zenodo.json` verlinkt beide Einträge über `related_identifiers`
+(`isNewVersionOf`) füreinander, damit sie auffindbar bleiben.
+
+*Einmalige Einrichtung* (nur der Repo-Owner kann das tun, erfordert eine Zenodo-Anmeldung
+mit GitHub-Login):
+
+. Auf https://zenodo.org/account/settings/github/[zenodo.org/account/settings/github] einloggen.
+. `kuml-dev/arXiv---The-Compiler-as-Oracle` in der Repo-Liste aktivieren (Toggle).
+. Einen GitHub-Release mit einem Git-Tag erstellen, z. B. `v1.1.0`:
++
+[source,bash]
+----
+git tag -a v1.1.0 -m "Add figures (GCR loop, Banking diagram, SF/HR chart) and Typed Domain Grounding terminology"
+git push origin v1.1.0
+gh release create v1.1.0 --title "v1.1.0 — Figures + Typed Domain Grounding" \
+  --notes "Adds three figures (rendered GCR loop, Banking class diagram, SF/HR bar chart) and introduces the Typed Domain Grounding (TDG) terminology in the abstract and introduction. Results remain the single-model dataset from v1.0.0 pending the full multi-model migration (see the paper's companion revision)."
+----
+. Zenodo greift den Release automatisch auf und erzeugt einen neuen Eintrag mit eigener DOI
+  (üblicherweise innerhalb weniger Minuten sichtbar unter den Zenodo-GitHub-Einstellungen).
+. Neue DOI in `README.adoc` (Badge + Zitierhinweis oben) und in `CITATION.cff` nachtragen.
+
+Danach jeder weitere `git tag` + GitHub-Release automatisch eine neue Version *dieses*
+Zenodo-Eintrags (nicht mehr eigenständig) — die Integration muss nur einmal aktiviert werden.
 
 == Verwandte Repositories
 

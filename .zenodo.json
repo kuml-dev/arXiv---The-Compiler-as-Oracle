@@ -1,0 +1,42 @@
+{
+  "title": "The Compiler as Oracle: Reliable LLM-Based Architecture Modeling via a Typed Internal DSL",
+  "description": "<p>Large language models (LLMs) are increasingly used to generate software architecture models from natural-language descriptions, typically targeting untyped external DSLs such as PlantUML or Mermaid. Because these formats defer all validation to render time, LLM outputs frequently contain hallucinated references, dangling associations, and semantically inconsistent structures that are silently rendered or fail with uninformative parse errors. We propose a Generate-Compile-Repair (GCR) framework, an instance of a general method we call Typed Domain Grounding, in which the target language is a statically typed internal DSL &mdash; kUML, embedded in Kotlin &mdash; and the Kotlin compiler serves as a deterministic, zero-cost validation oracle. Compile errors are fed back to the LLM as structured repair prompts, closing the loop without a second model, grammar-constrained decoding, or fine-tuning. A full run over a 50-task benchmark comparing kUML, PlantUML, and Mermaid shows kUML + GCR achieves the highest semantic fidelity and lowest hallucination rate of the three.</p>",
+  "creators": [
+    {
+      "name": "Betchvaia, Irakli",
+      "affiliation": "kUML Project",
+      "orcid": ""
+    }
+  ],
+  "keywords": [
+    "domain-specific languages",
+    "large language models",
+    "software architecture",
+    "model-driven engineering",
+    "self-repair",
+    "typed domain grounding",
+    "kUML"
+  ],
+  "license": "CC-BY-4.0",
+  "upload_type": "publication",
+  "publication_type": "preprint",
+  "access_right": "open",
+  "related_identifiers": [
+    {
+      "identifier": "10.5281/zenodo.21219554",
+      "relation": "isNewVersionOf",
+      "scheme": "doi"
+    },
+    {
+      "identifier": "https://github.com/kuml-dev/kUML",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://kuml.dev",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ],
+  "notes": "Supersedes the manually archived v1.0.0 record (10.5281/zenodo.21219554). This GitHub-Zenodo integration creates a new, separate Zenodo record/concept DOI on the first tagged release, since v1.0.0 predates the integration and was uploaded manually; the related_identifiers entry above links the two records for discoverability."
+}

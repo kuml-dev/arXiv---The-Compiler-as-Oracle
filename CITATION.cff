@@ -16,19 +16,22 @@ abstract: >-
   contain hallucinated references, dangling associations, and semantically
   inconsistent structures that are silently rendered or fail with
   uninformative parse errors. We propose a Generate-Compile-Repair (GCR)
-  framework in which the target language is a statically typed internal DSL
-  -- kUML, embedded in Kotlin -- and the Kotlin compiler serves as a
-  deterministic, zero-cost validation oracle. A full run over a 50-task
-  benchmark comparing kUML, PlantUML, and Mermaid shows kUML + GCR achieves
-  the highest semantic fidelity and lowest hallucination rate of the three.
+  framework, an instance of a general method we call Typed Domain Grounding,
+  in which the target language is a statically typed internal DSL -- kUML,
+  embedded in Kotlin -- and the Kotlin compiler serves as a deterministic,
+  zero-cost validation oracle. A full run over a 50-task benchmark comparing
+  kUML, PlantUML, and Mermaid shows kUML + GCR achieves the highest semantic
+  fidelity and lowest hallucination rate of the three.
 keywords:
   - domain-specific languages
   - large language models
   - software architecture
   - model-driven engineering
   - self-repair
+  - typed domain grounding
   - kUML
 license: CC-BY-4.0
 repository-code: "https://github.com/kuml-dev/arXiv---The-Compiler-as-Oracle"
 url: "https://kuml.dev"
-date-released: 2026-07-06
+version: "1.1.0-draft"
+date-released: 2026-07-12
