@@ -33,5 +33,12 @@ keywords:
 license: CC-BY-4.0
 repository-code: "https://github.com/kuml-dev/arXiv---The-Compiler-as-Oracle"
 url: "https://kuml.dev"
-version: "1.1.0-draft"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.21327229"
+    description: "Zenodo archive of v1.1.0 (adds figures and Typed Domain Grounding terminology)"
+  - type: doi
+    value: "10.5281/zenodo.21219554"
+    description: "Zenodo archive of v1.0.0 (original single-model preprint)"
+version: "1.1.0"
 date-released: 2026-07-12

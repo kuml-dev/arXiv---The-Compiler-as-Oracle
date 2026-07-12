@@ -1,11 +1,15 @@
 = The Compiler as Oracle — arXiv Preprint
 :description: LaTeX source for the kUML research paper "The Compiler as Oracle: Reliable LLM-Based Architecture Modeling via a Typed Internal DSL", targeting arXiv (cs.SE).
 
-image:https://zenodo.org/badge/DOI/10.5281/zenodo.21219554.svg[DOI,link=https://doi.org/10.5281/zenodo.21219554]
+image:https://zenodo.org/badge/DOI/10.5281/zenodo.21327229.svg[DOI,link=https://doi.org/10.5281/zenodo.21327229]
 
-*Citable now via Zenodo:* https://doi.org/10.5281/zenodo.21219554[10.5281/zenodo.21219554] (v1.0.0, 2026-07-06).
-The arXiv submission (cs.SE) is pending endorsement — see
-https://github.com/kuml-dev/kUML[the main kUML repository] and
+*Citable now via Zenodo:* https://doi.org/10.5281/zenodo.21327229[10.5281/zenodo.21327229] (v1.1.0, 2026-07-12 —
+adds three figures and the Typed Domain Grounding terminology; still the single-model result set).
+Earlier version: https://doi.org/10.5281/zenodo.21219554[10.5281/zenodo.21219554] (v1.0.0, 2026-07-06).
+v1.1.0 is a separate Zenodo record (own concept DOI, `10.5281/zenodo.21219553`) rather than a new version
+of v1.0.0, because v1.0.0 was uploaded manually before the GitHub-Zenodo integration existed — see
+`.zenodo.json`'s `related_identifiers` for the cross-link. The arXiv submission (cs.SE) is pending
+endorsement — see https://github.com/kuml-dev/kUML[the main kUML repository] and
 https://kuml.dev/blog/2026-07-06-gcr-benchmark-kuml-vs-plantuml-mermaid[the benchmark write-up]
 for context in the meantime.
 
@@ -77,35 +81,36 @@ ohne Änderungen am Fließtext.
 
 == Neue Zenodo-Version veröffentlichen
 
-Das Paper hat sich seit dem manuell hochgeladenen v1.0.0-Zenodo-Eintrag (2026-07-06,
-Einzelmodell-Stand, keine Abbildungen) weiterentwickelt: drei Abbildungen und die
-Typed-Domain-Grounding-Terminologie sind seither dazugekommen (2026-07-12). v1.0.0
-wurde ohne GitHub-Zenodo-Integration hochgeladen, daher lässt sich keine automatische
-"neue Version desselben Datensatzes" erzeugen — ein neuer Release über die
-GitHub-Integration legt einen **eigenständigen, neuen Zenodo-Eintrag** (eigene
-Concept-DOI) an. `.zenodo.json` verlinkt beide Einträge über `related_identifiers`
-(`isNewVersionOf`) füreinander, damit sie auffindbar bleiben.
+[NOTE]
+====
+**Erledigt für v1.1.0** (2026-07-12): Integration ist aktiv, Release ist raus, Zenodo hat
+den Eintrag erzeugt — https://doi.org/10.5281/zenodo.21327229[10.5281/zenodo.21327229].
+Die folgende Anleitung gilt jetzt nur noch für **künftige** Releases (v1.2.0 etc.), bei
+denen einfach Schritt 3 (Tag + Release) reicht — Schritte 1–2 (Autorisierung) sind bereits
+erledigt.
+====
 
-*Einmalige Einrichtung* (nur der Repo-Owner kann das tun, erfordert eine Zenodo-Anmeldung
-mit GitHub-Login):
+v1.0.0 wurde manuell hochgeladen, ohne GitHub-Zenodo-Integration — ein Release über die
+Integration legt daher einen **eigenständigen, neuen Zenodo-Eintrag** an (eigene
+Concept-DOI `10.5281/zenodo.21219553`, statt einer neuen Version von v1.0.0s Concept-DOI).
+`.zenodo.json` verlinkt beide Einträge über `related_identifiers` (`isNewVersionOf`)
+füreinander, damit sie auffindbar bleiben. Ab v1.1.0 hängen sich alle weiteren Tags/Releases
+automatisch als neue Version an *diesen* Eintrag (`10.5281/zenodo.21219553`) an — die
+Eigenständigkeits-Problematik betraf nur den allerersten Übergang.
 
-. Auf https://zenodo.org/account/settings/github/[zenodo.org/account/settings/github] einloggen.
-. `kuml-dev/arXiv---The-Compiler-as-Oracle` in der Repo-Liste aktivieren (Toggle).
-. Einen GitHub-Release mit einem Git-Tag erstellen, z. B. `v1.1.0`:
-+
+*Ablauf für einen neuen Release* (Autorisierung bei zenodo.org/account/settings/github/
+ist bereits erledigt, muss nicht wiederholt werden):
+
 [source,bash]
 ----
-git tag -a v1.1.0 -m "Add figures (GCR loop, Banking diagram, SF/HR chart) and Typed Domain Grounding terminology"
-git push origin v1.1.0
-gh release create v1.1.0 --title "v1.1.0 — Figures + Typed Domain Grounding" \
-  --notes "Adds three figures (rendered GCR loop, Banking class diagram, SF/HR bar chart) and introduces the Typed Domain Grounding (TDG) terminology in the abstract and introduction. Results remain the single-model dataset from v1.0.0 pending the full multi-model migration (see the paper's companion revision)."
+git tag -a vX.Y.Z -m "Kurzbeschreibung der Änderungen"
+git push origin vX.Y.Z
+gh release create vX.Y.Z --title "vX.Y.Z — Kurztitel" --notes "Ausführliche Release-Notes"
 ----
-. Zenodo greift den Release automatisch auf und erzeugt einen neuen Eintrag mit eigener DOI
-  (üblicherweise innerhalb weniger Minuten sichtbar unter den Zenodo-GitHub-Einstellungen).
-. Neue DOI in `README.adoc` (Badge + Zitierhinweis oben) und in `CITATION.cff` nachtragen.
 
-Danach jeder weitere `git tag` + GitHub-Release automatisch eine neue Version *dieses*
-Zenodo-Eintrags (nicht mehr eigenständig) — die Integration muss nur einmal aktiviert werden.
+Zenodo greift den Release automatisch auf (üblicherweise innerhalb weniger Minuten).
+Danach die neue DOI in `README.adoc` (Badge + Zitierhinweis oben) und `CITATION.cff`
+nachtragen — wie bei v1.1.0 hier bereits geschehen.
 
 == Verwandte Repositories
 
